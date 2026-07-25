@@ -181,8 +181,8 @@ def _issue_session_and_redirect(user_id: str):
         key=COOKIE_NAME,
         value=jwt_token,
         httponly=True,
-        secure=os.getenv("COOKIE_SECURE", "false").lower() == "true",
-        samesite="lax",
+        secure=True,
+        samesite="none",
         max_age=JWT_EXPIRE_DAYS * 24 * 60 * 60,
     )
 
