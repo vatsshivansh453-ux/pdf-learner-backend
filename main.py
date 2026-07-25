@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse, RedirectResponse, JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-
+from utils.embedding import create_embeddings
 from utils.pdf_reader import extract_text_from_pdf
 from utils.text_splitter import split_text_into_chunks
 from utils.embedding_test import create_embeddings
