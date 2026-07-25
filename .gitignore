@@ -1,0 +1,11 @@
+﻿venv/
+.venv/
+.env
+uploads/
+vector_store/
+database/
+__pycache__/
+*.pyc
+
+project_structure.txt
+vector_space/

@@ -1,0 +1,19 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+python-multipart
+
+# PDF / embeddings / search
+pypdf
+faiss-cpu
+numpy
+rank-bm25
+groq
+langchain-text-splitters
+sentence-transformers
+
+# Auth (new)
+authlib
+httpx
+PyJWT
+itsdangerous
