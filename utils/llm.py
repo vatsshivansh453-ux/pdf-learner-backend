@@ -1,4 +1,4 @@
-from groq import Groq
+from groq import Groq, RateLimitError, APIError
 from dotenv import load_dotenv
 import os
 
@@ -12,6 +12,31 @@ client = Groq(
 
 
 MODEL_NAME = "llama-3.3-70b-versatile"
+
+
+##############################################################
+# FRIENDLY ERROR HANDLING
+##############################################################
+# Groq's free tier has a daily token quota. When it's hit (or any other
+# API hiccup happens), the SDK raises an exception — previously this
+# crashed the request with an unhandled 500 error, which the frontend
+# showed as a blank reply or "Failed to fetch". This turns that into a
+# clear, human-readable message instead.
+
+RATE_LIMIT_MESSAGE = (
+    "I've hit the AI provider's rate limit for the moment (the free tier "
+    "has a daily usage cap). Please try again in a little while."
+)
+
+GENERIC_ERROR_MESSAGE = (
+    "Something went wrong talking to the AI provider just now. Please try again."
+)
+
+
+def _friendly_error_message(exc) -> str:
+    if isinstance(exc, RateLimitError):
+        return RATE_LIMIT_MESSAGE
+    return GENERIC_ERROR_MESSAGE
 
 
 
@@ -58,21 +83,21 @@ If the information is not available in the PDF, say:
 
 def ask_groq(question, context):
 
+    try:
+        response = client.chat.completions.create(
 
-    response = client.chat.completions.create(
+            model=MODEL_NAME,
 
-        model=MODEL_NAME,
+            messages=[
 
-        messages=[
+                {
+                    "role":"system",
+                    "content":SYSTEM_PROMPT
+                },
 
-            {
-                "role":"system",
-                "content":SYSTEM_PROMPT
-            },
-
-            {
-                "role":"user",
-                "content":f"""
+                {
+                    "role":"user",
+                    "content":f"""
 
 PDF Context:
 
@@ -84,15 +109,17 @@ Question:
 {question}
 
 """
-            }
+                }
 
-        ],
+            ],
 
-        temperature=0,
+            temperature=0,
 
-        max_tokens=2000
+            max_tokens=2000
 
-    )
+        )
+    except (RateLimitError, APIError) as e:
+        return _friendly_error_message(e)
 
 
     return response.choices[0].message.content
@@ -160,31 +187,34 @@ Answer using Markdown format.
 
 
 
-    response = client.chat.completions.create(
+    try:
+        response = client.chat.completions.create(
 
-        model=MODEL_NAME,
-
-
-        messages=[
-
-            {
-                "role":"system",
-                "content":SYSTEM_PROMPT
-            },
-
-            {
-                "role":"user",
-                "content":prompt
-            }
-
-        ],
+            model=MODEL_NAME,
 
 
-        temperature=0,
+            messages=[
 
-        max_tokens=2000
+                {
+                    "role":"system",
+                    "content":SYSTEM_PROMPT
+                },
 
-    )
+                {
+                    "role":"user",
+                    "content":prompt
+                }
+
+            ],
+
+
+            temperature=0,
+
+            max_tokens=2000
+
+        )
+    except (RateLimitError, APIError) as e:
+        return _friendly_error_message(e)
 
 
 
@@ -246,24 +276,30 @@ Only return the rewritten question.
 
 
 
-    response = client.chat.completions.create(
+    try:
+        response = client.chat.completions.create(
 
-        model=MODEL_NAME,
-
-
-        messages=[
-
-            {
-                "role":"user",
-                "content":prompt
-            }
-
-        ],
+            model=MODEL_NAME,
 
 
-        temperature=0
+            messages=[
 
-    )
+                {
+                    "role":"user",
+                    "content":prompt
+                }
+
+            ],
+
+
+            temperature=0
+
+        )
+    except (RateLimitError, APIError):
+        # Internal helper — if it fails, just search using the question
+        # as typed instead of surfacing an error for something the user
+        # didn't directly ask for.
+        return question
 
 
 
@@ -280,18 +316,19 @@ Only return the rewritten question.
 def generate_chat_title(question):
 
 
-    response = client.chat.completions.create(
+    try:
+        response = client.chat.completions.create(
 
-        model=MODEL_NAME,
+            model=MODEL_NAME,
 
 
-        messages=[
+            messages=[
 
-            {
+                {
 
-                "role":"system",
+                    "role":"system",
 
-                "content":"""
+                    "content":"""
 
 Generate a short chat title.
 
@@ -304,23 +341,25 @@ Rules:
 
 """
 
-            },
+                },
 
 
-            {
+                {
 
-                "role":"user",
+                    "role":"user",
 
-                "content":question
+                    "content":question
 
-            }
+                }
 
-        ],
+            ],
 
 
-        temperature=0
+            temperature=0
 
-    )
+        )
+    except (RateLimitError, APIError):
+        return "New Chat"
 
 
 
@@ -337,15 +376,16 @@ Rules:
 def generate_emoji_summary(document_text):
 
 
-    response = client.chat.completions.create(
+    try:
+        response = client.chat.completions.create(
 
-        model=MODEL_NAME,
+            model=MODEL_NAME,
 
-        messages=[
+            messages=[
 
-            {
-                "role":"system",
-                "content":"""
+                {
+                    "role":"system",
+                    "content":"""
 
 You are summarizing a PDF document as a fun, skimmable "emoji summary".
 
@@ -365,20 +405,22 @@ Example format:
 ☀️ Light reactions happen in the thylakoid membrane
 
 """
-            },
+                },
 
-            {
-                "role":"user",
-                "content":f"Document:\n\n{document_text}"
-            }
+                {
+                    "role":"user",
+                    "content":f"Document:\n\n{document_text}"
+                }
 
-        ],
+            ],
 
-        temperature=0.3,
+            temperature=0.3,
 
-        max_tokens=500
+            max_tokens=500
 
-    )
+        )
+    except (RateLimitError, APIError) as e:
+        return _friendly_error_message(e)
 
 
     return response.choices[0].message.content.strip()
@@ -393,15 +435,16 @@ Example format:
 def generate_cheat_sheet(document_text):
 
 
-    response = client.chat.completions.create(
+    try:
+        response = client.chat.completions.create(
 
-        model=MODEL_NAME,
+            model=MODEL_NAME,
 
-        messages=[
+            messages=[
 
-            {
-                "role":"system",
-                "content":"""
+                {
+                    "role":"system",
+                    "content":"""
 
 You create a compact "cheat sheet" for a PDF document — the kind of thing a student
 would print out before an exam.
@@ -415,23 +458,24 @@ Rules:
 - Include a `Quick Formulas / Rules` section ONLY if the document contains formulas, equations, or rules — otherwise omit this section entirely.
 - Be dense and skimmable. No long paragraphs. No filler sentences.
 - Only use information found in the document. Do not invent anything.
--create a pdf file of conatining the text you generated for the user and give to user 
 
 """
-            },
+                },
 
-            {
-                "role":"user",
-                "content":f"Document:\n\n{document_text}"
-            }
+                {
+                    "role":"user",
+                    "content":f"Document:\n\n{document_text}"
+                }
 
-        ],
+            ],
 
-        temperature=0,
+            temperature=0,
 
-        max_tokens=1500
+            max_tokens=1500
 
-    )
+        )
+    except (RateLimitError, APIError) as e:
+        return _friendly_error_message(e)
 
 
     return response.choices[0].message.content.strip()
@@ -484,51 +528,55 @@ in the Current Question refer to.
 
 """
 
-    stream = client.chat.completions.create(
+    try:
+        stream = client.chat.completions.create(
 
-        model=MODEL_NAME,
-
-
-        messages=[
+            model=MODEL_NAME,
 
 
-            {
-
-                "role":"system",
-
-                "content":SYSTEM_PROMPT
-
-            },
+            messages=[
 
 
-            {
+                {
 
-                "role":"user",
+                    "role":"system",
 
-                "content":prompt
+                    "content":SYSTEM_PROMPT
 
-            }
-
-
-        ],
+                },
 
 
-        temperature=0,
+                {
+
+                    "role":"user",
+
+                    "content":prompt
+
+                }
 
 
-        max_tokens=2000,
+            ],
 
 
-        stream=True
-
-    )
+            temperature=0,
 
 
-
-    for chunk in stream:
-
-
-        if chunk.choices[0].delta.content:
+            max_tokens=2000,
 
 
-            yield chunk.choices[0].delta.content
+            stream=True
+
+        )
+
+
+
+        for chunk in stream:
+
+
+            if chunk.choices[0].delta.content:
+
+
+                yield chunk.choices[0].delta.content
+
+    except (RateLimitError, APIError) as e:
+        yield _friendly_error_message(e)
