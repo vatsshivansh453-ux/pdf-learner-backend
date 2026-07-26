@@ -6,9 +6,10 @@ from fastapi.responses import StreamingResponse, RedirectResponse, JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from utils.embedding import create_embeddings
+
 from utils.pdf_reader import extract_text_from_pdf
 from utils.text_splitter import split_text_into_chunks
+from utils.embedding import create_embeddings
 
 from utils.memory import (
     get_chat_history,
@@ -177,12 +178,24 @@ def _issue_session_and_redirect(user_id: str):
 
     response = RedirectResponse(url=FRONTEND_URL)
 
+    is_secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+
     response.set_cookie(
         key=COOKIE_NAME,
         value=jwt_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=is_secure,
+        # Frontend (Vercel) and backend (Render) are different domains in
+        # production, which makes every API call from the frontend a
+        # cross-site request. Browsers only send a cookie on cross-site
+        # fetch()/XHR calls if it's SameSite=None (and SameSite=None is
+        # only allowed by browsers when the cookie is also Secure, i.e.
+        # HTTPS-only) — otherwise the cookie gets set fine on login but
+        # silently never gets sent back on the next request, which looks
+        # exactly like "sign in does nothing". Locally (COOKIE_SECURE not
+        # set to true) we fall back to "lax" since localhost isn't HTTPS
+        # and browsers reject Secure cookies over plain http.
+        samesite="none" if is_secure else "lax",
         max_age=JWT_EXPIRE_DAYS * 24 * 60 * 60,
     )
 
